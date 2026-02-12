@@ -1,0 +1,28 @@
+services:
+  game-service:
+    build:
+      context: ./game-service
+      dockerfile: Dockerfile
+    container_name: game-service
+    ports:
+      - "8081:8081"
+    networks:
+      - game-network
+
+  chat-service:
+    build:
+      context: ./chatapplication
+      dockerfile: Dockerfile
+    container_name: chat-service
+    ports:
+      - "8080:8080"
+    networks:
+      - game-network
+    environment:
+      - GAME_SERVICE_URL=http://game-service:8081/game
+    depends_on:
+      - game-service
+
+networks:
+  game-network:
+    driver: bridge

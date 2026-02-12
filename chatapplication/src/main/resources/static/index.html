@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Spring Boot WebSocket Chat Application</title>
+    <link rel="stylesheet" href="/css/main.css">
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+</head>
+<body>
+
+<div id="username-page">
+    <div class="username-page-container">
+        <h1 class="title">Welcome to Chat Application</h1>
+        <form id="usernameForm" name="usernameForm">
+            <div class="form-group">
+                <input type="text" id="username" placeholder="Enter your name" autocomplete="off" class="form-control"/>
+            </div>
+            <div class="form-group">
+                <button type="button" id="createRoomBtn" class="accent username-submit">Create Room</button>
+            </div>
+            <div class="seperator">OR</div>
+            <div class="form-group">
+                <input type="text" id="roomCode" placeholder="Enter Room Code ...." autocomplete="off" class="form-control"/>
+            </div>
+            <div class="form-group">
+                <button type="button" id="joinRoomBtn" class="accent username-submit">Join Room</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="lobby-page" class="hidden">
+    <div class="lobby-container">
+        <h2 class="title">Game Lobby</h2>
+        <div class="Room-Info">
+            <p>Your Room Code: <span id="lobbyRoomCode"></span></p>
+            <p>Share this code with others to join the room.</p>
+        </div>
+        <div class="players-section">
+            <h3>Players (<span id="playerCount">0</span>)</h3>
+            <ul id="playersList">
+            </ul>
+        </div>
+        <div class="lobby-actions">
+            <p class="waiting-message hidden" id="waitingMessage">Waiting for admin to start the game...</p>
+            <button id="startGameBtn" class="accent start-game-btn hidden">Start Game</button>
+        </div>
+    </div>
+</div>
+
+<div id="chat-page" class="hidden">
+    <div class="chat-container">
+        <div class="chat-header">
+            <h2>Drawing Game - Round <span id="currentRound">0</span>/<span id="maxRounds">0</span></h2>
+            <button id="leaveGameBtn" class="leave-btn">Leave Game</button>
+        </div>
+        <div class="game-info">
+            <div class="drawer-info">
+                <strong>Drawer:</strong> <span id="currentDrawer">-</span>
+            </div>
+            <div class="word-display hidden" id="wordDisplay">
+                <strong>Your word:</strong> <span id="wordText"></span>
+            </div>
+            <div class="timer-display">
+                <strong>Time:</strong> <span id="timeRemaining">60</span>s
+            </div>
+        </div>
+        <div class="canvas-container" id="canvasContainer">
+            <canvas id="drawingCanvas" width="800" height="600"></canvas>
+            <div class="drawing-tools" id="drawingTools">
+                <button class="tool-btn" data-tool="pen">✏️ Pen</button>
+                <button class="tool-btn" data-tool="eraser">🧹 Eraser</button>
+                <input type="color" id="colorPicker" value="#000000">
+                <input type="range" id="brushSize" min="1" max="20" value="3">
+                <button class="tool-btn" id="clearCanvas">🗑️ Clear</button>
+            </div>
+        </div>
+        <ul id="messageArea"></ul>
+        <form id="messageForm" name="messageForm">
+            <div class="form-group">
+                <div class="input-group clearfix">
+                    <input type="text" id="message" placeholder="Type your guess..." autocomplete="off" class="form-control"/>
+                    <button type="submit" class="primary">Send</button>
+                </div>
+            </div>
+        </form>
+    </div>
+    <div class="score-panel">
+        <h3>Leaderboard</h3>
+        <ul id="leaderboard"></ul>
+    </div>
+</div>
+
+<div id="round-end-page" class="hidden">
+    <div class="round-end-container">
+        <h1>Round Complete!</h1>
+        <div class="word-reveal">
+            <p>The Word was: <strong id="revealedWord"></strong></p>
+        </div>
+        <div class="leaderboard-section">
+            <h3>Leaderboard</h3>
+            <ul id="roundEndLeaderboard"></ul>
+        </div>
+        <div class="next-round-info" id="nextRoundInfo">
+            <p>Next drawer: <strong id="nextDrawer"></strong></p>
+        </div>
+        <button id="nextRoundBtn" class="accent next-round-btn">Next Round</button>
+        <p class="waiting-message hidden" id="waitingNextRound">Waiting for next Round...</p>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+<script src="/js/main.js"></script>
+</body>
+</html>

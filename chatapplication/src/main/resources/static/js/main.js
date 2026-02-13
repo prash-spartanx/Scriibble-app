@@ -91,7 +91,7 @@ createRoomBtn.addEventListener('click', createRoom, true);
 joinRoomBtn.addEventListener('click', joinRoom, true);
 messageForm.addEventListener('submit', sendMessage, true);
 startGameBtn.addEventListener('click', startGame, true);
-nextRoundBtn.addEventListener('click', startNextRound, true);
+//nextRoundBtn.addEventListener('click', startNextRound, true);
 leaveGameBtn.addEventListener('click', leaveGame, true);
 
 /* ==================== ROOM CREATION ==================== */
@@ -331,17 +331,17 @@ function startGame() {
     })
     .then(data => {
         console.log('[GAME] Round started:', data);
-
-        var roundStartMsg = {
-            type: 'ROUND_START',
-            content: JSON.stringify(data),
-            sender: 'SYSTEM',
-            sessionId: sessionId,
-            playerId: playerId
-        };
-
-        console.log('[WS] Broadcasting ROUND_START');
-        stompClient.send("/app/chat.sendMessage", {}, JSON.stringify(roundStartMsg));
+//
+//        var roundStartMsg = {
+//            type: 'ROUND_START',
+//            content: JSON.stringify(data),
+//            sender: 'SYSTEM',
+//            sessionId: sessionId,
+//            playerId: playerId
+//        };
+//
+//        console.log('[WS] Broadcasting ROUND_START');
+//        stompClient.send("/app/chat.sendMessage", {}, JSON.stringify(roundStartMsg));
 
         startRound(data);
     })
@@ -358,8 +358,8 @@ function startRound(data) {
     console.log('[ROUND] My player ID:', playerId);
 
     lobbyPage.classList.add('hidden');
-    roundEndPage.classList.add('hidden');
     chatPage.classList.remove('hidden');
+    roundEndPage.classList.add('hidden');
 
     gameState.currentRound = data.roundNumber;
     currentRoundSpan.textContent = data.roundNumber;
@@ -437,56 +437,56 @@ function startTimer(duration) {
 
         if (remaining <= 0) {
             clearInterval(timerInterval);
-            endRound();
         }
     }, 1000);
 }
 
 /* ==================== ROUND END ==================== */
-function endRound() {
-    console.log('[ROUND] Ending round - isAdmin:', isAdmin);
-
-    if (!isAdmin) {
-        console.log('[ROUND] Not admin, skipping end-round call');
-        return;
-    }
-
-    console.log('[ROUND] Calling end-round endpoint');
-
-    fetch('http://localhost:8081/game/end-round?sessionId=' + sessionId, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'}
-    })
-    .then(response => {
-        console.log('[ROUND] End-round response:', response.status);
-        if (!response.ok) {
-            return response.text().then(text => {
-                throw new Error(text);
-            });
-        }
-        return response.json();
-    })
-    .then(data => {
-        console.log('[ROUND] Round ended:', data);
-
-        var roundEndMsg = {
-            type: 'ROUND_END',
-            content: JSON.stringify(data),
-            sender: 'SYSTEM',
-            sessionId: sessionId,
-            playerId: playerId
-        };
-
-        console.log('[WS] Broadcasting ROUND_END');
-        stompClient.send("/app/chat.sendMessage", {}, JSON.stringify(roundEndMsg));
-
-        showRoundEnd(data);
-    })
-    .catch(error => {
-        console.error('[ROUND] End error:', error);
-        alert('Error ending round: ' + error.message);
-    });
-}
+//function endRound() {
+//    console.log('[ROUND] Ending round - isAdmin:', isAdmin);
+//
+//    if (!isAdmin) {
+//        console.log('[ROUND] Not admin, skipping end-round call');
+//        return;
+//    }
+//
+//    console.log('[ROUND] Calling end-round endpoint');
+//
+//    fetch('http://localhost:8081/game/end-round?sessionId=' + sessionId, {
+//        method: 'POST',
+//        headers: {'Content-Type': 'application/json'}
+//    })
+//    .then(response => {
+//        console.log('[ROUND] End-round response:', response.status);
+//        if (!response.ok) {
+//            return response.text().then(text => {
+//                throw new Error(text);
+//            });
+//        }
+//        return response.json();
+//    })
+//    .then(data => {
+//        console.log('[ROUND] Round ended:', data);
+//
+//        var roundEndMsg = {
+//            type: 'ROUND_END',
+//            content: JSON.stringify(data),
+//            sender: 'SYSTEM',
+//            sessionId: sessionId,
+//            playerId: playerId
+//        };
+//
+//        console.log('[WS] Broadcasting ROUND_END');
+//        stompClient.send("/app/chat.sendMessage", {}, JSON.stringify(roundEndMsg));
+//
+//        showRoundEnd(data);
+//    })
+//    .catch(error => {
+//        console.error('[ROUND] End error:', error);
+//        alert('Error ending round: ' + error.message);
+//    });
+//}
+var autoNextRoundTimer = null; // put this near your globals (top of main.js)
 
 function showRoundEnd(data) {
     console.log('[ROUND_END] Showing round end screen');
@@ -502,13 +502,21 @@ function showRoundEnd(data) {
     if (data.leaderboard && data.leaderboard.length > 0) {
         data.leaderboard.forEach(function(player, index) {
             var li = document.createElement('li');
-            li.innerHTML = '<span>' + (index + 1) + '. ' + player.username + '</span><span>' + player.totalScore + ' pts</span>';
+            li.innerHTML =
+                '<span>' + (index + 1) + '. ' + player.username + '</span>' +
+                '<span>' + player.totalScore + ' pts</span>';
             roundEndLeaderboard.appendChild(li);
         });
     } else {
         var li = document.createElement('li');
         li.textContent = 'No scores yet';
         roundEndLeaderboard.appendChild(li);
+    }
+
+    // Clear any previous timer (safety)
+    if (autoNextRoundTimer) {
+        clearInterval(autoNextRoundTimer);
+        autoNextRoundTimer = null;
     }
 
     if (data.isGameComplete) {
@@ -522,23 +530,35 @@ function showRoundEnd(data) {
         nextDrawer.textContent = data.nextDrawerUsername || 'Unknown';
         nextRoundInfo.classList.remove('hidden');
 
-        if (isAdmin) {
-            nextRoundBtn.classList.remove('hidden');
-            waitingNextRound.classList.add('hidden');
-        } else {
-            nextRoundBtn.classList.add('hidden');
-            waitingNextRound.textContent = 'Waiting for admin to start next round...';
-            waitingNextRound.classList.remove('hidden');
-        }
+        // Hide manual button for everyone during auto-start
+        nextRoundBtn.classList.add('hidden');
+
+        // Start 5-second countdown
+        var secondsLeft = 5;
+        waitingNextRound.textContent = 'Next round starting in ' + secondsLeft + '...';
+        waitingNextRound.classList.remove('hidden');
+
+        autoNextRoundTimer = setInterval(function () {
+            secondsLeft--;
+            if (secondsLeft > 0) {
+                waitingNextRound.textContent = 'Next round starting in ' + secondsLeft + '...';
+            } else {
+                clearInterval(autoNextRoundTimer);
+                autoNextRoundTimer = null;
+
+                    waitingNextRound.textContent = 'Starting...';
+
+            }
+        }, 1000);
     }
 
     fetchSessionInfo();
 }
 
-function startNextRound() {
-    console.log('[ROUND] Starting next round');
-    startGame();
-}
+//function startNextRound() {
+//    console.log('[ROUND] Starting next round');
+//    startGame();
+//}
 
 /* ==================== MESSAGES ==================== */
 function sendMessage(event) {
@@ -620,16 +640,15 @@ function onMessageReceived(payload) {
             break;
 
         case 'ROUND_END':
-            if (message.playerId !== playerId) {
-                console.log('[WS] Processing ROUND_END from another player');
-                try {
-                    var endData = JSON.parse(message.content);
-                    showRoundEnd(endData);
-                } catch(e) {
-                    console.error('[ROUND_END] Parse error:', e);
-                }
+            console.log('[WS] Processing ROUND_END');
+            try {
+                var endData = JSON.parse(message.content);
+                showRoundEnd(endData);
+            } catch(e) {
+                console.error('[ROUND_END] Parse error:', e);
             }
             break;
+
 
         case 'CHAT':
             addChatMessage(message);

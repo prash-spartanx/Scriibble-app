@@ -3,7 +3,10 @@ package com.example.game_service.controller;
 import com.example.game_service.dto.*;
 import com.example.game_service.service.GameService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/game")
@@ -13,6 +16,9 @@ public class GameController {
     public GameController(GameService gameService) {
         this.gameService = gameService;
     }
+    // DO NOT change your existing mappings
+
+
 
     @PostMapping("/create-session")
     public CreateSessionResponse createSession(@RequestBody CreateSessionRequest request) {

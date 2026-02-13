@@ -8,6 +8,8 @@ services:
       - "8081:8081"
     networks:
       - game-network
+    environment:
+      - CHAT_SERVICE_URL=http://chat-service:8080
 
   chat-service:
     build:

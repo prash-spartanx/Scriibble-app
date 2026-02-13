@@ -10,6 +10,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class GameSession {
+    private int currentTurnInRound;
     private String sessionId;
     private String roomCode;
     private String adminPlayerId;
@@ -23,6 +24,7 @@ public class GameSession {
     private long createdAt;
 
     public GameSession(String adminUsername, int roundDuration, int maxRounds) {
+        this.currentTurnInRound = 0;
         this.sessionId = java.util.UUID.randomUUID().toString();
         this.roomCode = generateRoomCode();
         this.players = new ArrayList<>();

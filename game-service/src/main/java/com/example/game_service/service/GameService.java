@@ -178,6 +178,9 @@ public class GameService {
 
         hintTimers.put(sessionId, hintFuture);
 
+        // ✅ FIX: Create initial masked word for non-drawers
+        String initialMaskedWord = newRound.getMaskedWord();
+
         StartRoundResponse response = new StartRoundResponse(
                 newRound.getRoundId(),
                 newRound.getRoundNumber(),
@@ -185,7 +188,8 @@ public class GameService {
                 newRound.getDrawerUsername(),
                 session.getRoundDuration(),
                 "Turn " + newRound.getRoundNumber() + " started. " + drawer.getUsername() + " is drawing.",
-                newRound.getEndTime()
+                newRound.getEndTime(),
+                initialMaskedWord  // ✅ FIX: Include masked word for non-drawers
         );
 
         chatServiceClient.broadcastRoundStart(sessionId, response);
@@ -240,7 +244,7 @@ public class GameService {
             }
         }
 
-        boolean isGameComplete = session.isGameComplete();
+        boolean isGameComplete = session.getCurrentRoundNumber() >= session.getMaxRounds();
 
         if (isGameComplete) {
             session.setStatus(GameStatus.ENDED);
@@ -269,16 +273,17 @@ public class GameService {
             }, 5, TimeUnit.SECONDS);
         }
 
-        EndRoundResponse response = new  EndRoundResponse(
+        // ✅ FIX: Always provide nextDrawerUsername (even if game complete)
+        // Frontend can decide whether to show it or not based on isGameComplete
+        EndRoundResponse response = new EndRoundResponse(
                 "Turn ended!",
                 currentRound.getWord(),
                 leaderboard,
                 isGameComplete,
-                isGameComplete ? null : nextDrawerUsername
+                nextDrawerUsername  // ✅ FIX: Always include, don't set to null when complete
         );
         chatServiceClient.broadcastRoundEnd(sessionId, response);
         return response;
-
     }
 
     public GetWordResponse getWord(GetWordRequest request){

@@ -340,17 +340,6 @@ function startGame() {
     })
     .then(data => {
         console.log('[GAME] Round started:', data);
-//
-//        var roundStartMsg = {
-//            type: 'ROUND_START',
-//            content: JSON.stringify(data),
-//            sender: 'SYSTEM',
-//            sessionId: sessionId,
-//            playerId: playerId
-//        };
-//
-//        console.log('[WS] Broadcasting ROUND_START');
-//        stompClient.send("/app/chat.sendMessage", {}, JSON.stringify(roundStartMsg));
 
         startRound(data);
     })
@@ -364,6 +353,7 @@ function startGame() {
 
 function startRound(data) {
     console.log('[ROUND] Starting round:', data.roundNumber);
+        console.log('[DEBUG] Round number value:', data.roundNumber, 'Max rounds:', gameState.maxRounds);
 
     // 🔥 Set active round identity
     activeRoundId = data.roundId || (data.roundNumber + ":" + data.drawerId);
@@ -420,7 +410,7 @@ function startRound(data) {
 
         wordDisplay.classList.add('hidden');
 
-        // 🔥 No fallback mask — must come from backend
+        // ✅ FIX: Use maskedWord from backend response
         if (!data.maskedWord) {
             console.warn("Masked word missing from ROUND_START payload");
             return;
@@ -433,7 +423,10 @@ function startRound(data) {
         startHintReveal(data.roundId || (data.roundNumber + ":" + data.drawerId));
     }
 
-    startTimer(data.endTime);
+    // ✅ FIX: Use roundEndsAt OR endTime (both should work now)
+    const endTime = data.roundEndsAt || data.endTime;
+    console.log('[TIMER] End time received:', endTime);
+    startTimer(endTime);
     fetchSessionInfo();
 }
 
@@ -488,53 +481,10 @@ function startHintReveal(roundKey) {
 
 
 /* ==================== ROUND END ==================== */
-//function endRound() {
-//    console.log('[ROUND] Ending round - isAdmin:', isAdmin);
-//
-//    if (!isAdmin) {
-//        console.log('[ROUND] Not admin, skipping end-round call');
-//        return;
-//    }
-//
-//    console.log('[ROUND] Calling end-round endpoint');
-//
-//    fetch('http://localhost:8081/game/end-round?sessionId=' + sessionId, {
-//        method: 'POST',
-//        headers: {'Content-Type': 'application/json'}
-//    })
-//    .then(response => {
-//        console.log('[ROUND] End-round response:', response.status);
-//        if (!response.ok) {
-//            return response.text().then(text => {
-//                throw new Error(text);
-//            });
-//        }
-//        return response.json();
-//    })
-//    .then(data => {
-//        console.log('[ROUND] Round ended:', data);
-//
-//        var roundEndMsg = {
-//            type: 'ROUND_END',
-//            content: JSON.stringify(data),
-//            sender: 'SYSTEM',
-//            sessionId: sessionId,
-//            playerId: playerId
-//        };
-//
-//        console.log('[WS] Broadcasting ROUND_END');
-//        stompClient.send("/app/chat.sendMessage", {}, JSON.stringify(roundEndMsg));
-//
-//        showRoundEnd(data);
-//    })
-//    .catch(error => {
-//        console.error('[ROUND] End error:', error);
-//        alert('Error ending round: ' + error.message);
-//    });
-//}
 
 function showRoundEnd(data) {
     console.log('[ROUND_END] Showing round end screen');
+    console.log('[ROUND_END] Data received:', data);
 
     // 🔥 Kill timers
     if (hintInterval) clearInterval(hintInterval);
@@ -571,18 +521,30 @@ function showRoundEnd(data) {
     maskedWordDiv.textContent = '';
     maskedWordDiv.classList.add('hidden');
 
-    if (data.isGameComplete) {
+    // ✅ FIX: Check if game is complete
+    console.log('[ROUND_END] isGameComplete:', data.gameComplete);
+
+    if (data.gameComplete) {
+        // Game is over - show winner screen
+        console.log('[ROUND_END] Game complete - showing winner screen');
         nextRoundInfo.classList.add('hidden');
         nextRoundBtn.classList.add('hidden');
-        waitingNextRound.textContent = 'Game Over!';
-        waitingNextRound.classList.remove('hidden');
+        waitingNextRound.classList.add('hidden');
         roundEndPage.classList.add('hidden');
+
         document.getElementById("winnerScreen").classList.remove("hidden");
 
-        var winner = data.leaderboard[0];
-        document.getElementById("winnerName").textContent =
-        winner.username + " - " + winner.totalScore + " pts";
+        if (data.leaderboard && data.leaderboard.length > 0) {
+            var winner = data.leaderboard[0];
+            document.getElementById("winnerName").textContent =
+                winner.username + " - " + winner.totalScore + " pts";
+        }
     } else {
+        // Game continues - show next round info
+        console.log('[ROUND_END] Game continues - next drawer:', data.nextDrawerUsername);
+
+        // ✅ FIX: Show next drawer info only when game is NOT complete
+        nextRoundInfo.classList.remove('hidden');
         nextDrawer.textContent = data.nextDrawerUsername || 'Unknown';
         nextRoundBtn.classList.add('hidden');
 
@@ -600,17 +562,11 @@ function showRoundEnd(data) {
                 waitingNextRound.textContent = 'Waiting for next round...';
             }
         }, 1000);
-
     }
 
     fetchSessionInfo();
 }
 
-
-//function startNextRound() {
-//    console.log('[ROUND] Starting next round');
-//    startGame();
-//}
 
 /* ==================== MESSAGES ==================== */
 function sendMessage(event) {

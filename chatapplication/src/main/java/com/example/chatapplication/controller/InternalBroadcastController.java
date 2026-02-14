@@ -9,8 +9,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import tools.jackson.databind.ObjectMapper;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 
 @RestController
@@ -28,11 +27,19 @@ public class InternalBroadcastController {
     public void broadcastRoundEnd(@RequestBody Map<String, Object> payload) throws Exception {
         Object data = payload.get("data");
 
+        // ADD THESE LINES:
+        System.out.println("=== ROUND END DEBUG ===");
+        System.out.println("Raw data object: " + data);
+        System.out.println("Data class: " + data.getClass().getName());
+
         String json = objectMapper.writeValueAsString(data);
+
+        // ADD THIS LINE:
+        System.out.println("Serialized JSON: " + json);
 
         ChatMessage msg = new ChatMessage();
         msg.setType(MessageType.ROUND_END);
-        msg.setContent(json);   // ✅ now String
+        msg.setContent(json);
         msg.setSender("SYSTEM");
 
         messagingTemplate.convertAndSend("/topic/public", msg);

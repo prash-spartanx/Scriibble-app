@@ -15,4 +15,14 @@ public class StartRoundResponse {
     private long roundDuration;
     private String message;
     private long roundEndsAt;
+    private String maskedWord;  // Add this for non-drawers
+
+    // Add endTime as alias for roundEndsAt for backward compatibility
+    public long getEndTime() {
+        return this.roundEndsAt;
+    }
+
+    public void setEndTime(long endTime) {
+        this.roundEndsAt = endTime;
+    }
 }

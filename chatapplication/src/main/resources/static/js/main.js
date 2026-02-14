@@ -441,10 +441,24 @@ function startRound(data) {
 
 /* ==================== TIMER ==================== */
 function startTimer(endTime) {
+    if (!endTime) {
+        console.error("[TIMER] endTime missing");
+        timeRemaining.textContent = "--";
+        return;
+    }
+
+    var end = new Date(endTime).getTime();
+
+    if (isNaN(end)) {
+        console.error("[TIMER] Invalid endTime:", endTime);
+        timeRemaining.textContent = "--";
+        return;
+    }
+
     if (timerInterval) clearInterval(timerInterval);
 
     function tick() {
-        var remaining = Math.max(0, Math.floor((new Date(endTime) - Date.now()) / 1000));
+        var remaining = Math.max(0, Math.floor((end - Date.now()) / 1000));
         timeRemaining.textContent = remaining;
 
         if (remaining <= 0) {
@@ -453,7 +467,7 @@ function startTimer(endTime) {
         }
     }
 
-    tick(); // run immediately
+    tick();
     timerInterval = setInterval(tick, 1000);
 }
 
@@ -582,9 +596,11 @@ function showRoundEnd(data) {
                 waitingNextRound.textContent = 'Next round starting in ' + secondsLeft + '...';
             } else {
                 clearInterval(autoNextRoundTimer);
-                waitingNextRound.textContent = 'Starting...';
+                autoNextRoundTimer = null;
+                waitingNextRound.textContent = 'Waiting for next round...';
             }
         }, 1000);
+
     }
 
     fetchSessionInfo();
@@ -650,7 +666,12 @@ function onMessageReceived(payload) {
         case 'EVENT':
             addEventMessage(message.content);
 
-            if (message.content.includes("correct")) {
+            if (
+                message.content.toLowerCase().includes("correct") ||
+                message.content.toLowerCase().includes("guessed") ||
+                message.content.toLowerCase().includes("points")
+            ) {
+
                 document.getElementById("correctSound").play();
             }
             fetchSessionInfo();

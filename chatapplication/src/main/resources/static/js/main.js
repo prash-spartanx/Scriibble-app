@@ -57,7 +57,16 @@ var sessionId = null;
 var playerId = null;
 var roomCode = null;
 var isAdmin = false;
+var currentRoundId = null;
+var hintInterval = null;
+var autoNextRoundTimer = null;
 var timerInterval = null;
+
+var activeRoundId = null;   // 🔥 critical
+var activeMaskedWord = null;
+var revealedIndexes = new Set();
+
+
 
 var gameState = {
     currentRound: 0,
@@ -352,10 +361,19 @@ function startGame() {
 }
 
 /* ==================== ROUND START ==================== */
+
 function startRound(data) {
     console.log('[ROUND] Starting round:', data.roundNumber);
-    console.log('[ROUND] Drawer ID:', data.drawerId);
-    console.log('[ROUND] My player ID:', playerId);
+
+    // 🔥 Set active round identity
+    activeRoundId = data.roundId || (data.roundNumber + ":" + data.drawerId);
+
+    // 🔥 Kill all previous timers
+    if (timerInterval) clearInterval(timerInterval);
+    if (hintInterval) clearInterval(hintInterval);
+    if (autoNextRoundTimer) clearInterval(autoNextRoundTimer);
+
+    revealedIndexes.clear();
 
     lobbyPage.classList.add('hidden');
     chatPage.classList.remove('hidden');
@@ -366,80 +384,94 @@ function startRound(data) {
     maxRoundsSpan.textContent = gameState.maxRounds;
     currentDrawerSpan.textContent = data.drawerUsername;
 
-    messageArea.innerHTML = '';
+    wordText.textContent = '';
+    wordDisplay.classList.add('hidden');
 
-    if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
+    var maskedWordDiv = document.getElementById("maskedWord");
+    maskedWordDiv.textContent = '';
+    maskedWordDiv.classList.add('hidden');
+
+    messageArea.innerHTML = '';
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     gameState.isDrawer = (playerId === data.drawerId);
-    console.log('[ROUND] Am I drawer?', gameState.isDrawer);
 
     if (gameState.isDrawer) {
-        console.log('[DRAWER] Enabling canvas');
         if (canvasContainer) canvasContainer.classList.remove('disabled');
         if (drawingTools) drawingTools.style.display = 'flex';
 
-        console.log('[DRAWER] Fetching word');
         fetch('http://localhost:8081/game/get-word', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                sessionId: sessionId,
-                playerId: playerId
-            })
+            body: JSON.stringify({ sessionId, playerId })
         })
-        .then(response => {
-            console.log('[DRAWER] Get-word response:', response.status);
-            if (!response.ok) {
-                return response.text().then(text => {
-                    throw new Error(text);
-                });
-            }
-            return response.json();
-        })
+        .then(res => res.json())
         .then(wordData => {
-            console.log('[DRAWER] Word received:', wordData);
-            if (wordData.word) {
-                wordText.textContent = wordData.word;
-                wordDisplay.classList.remove('hidden');
-            } else {
-                alert('Failed to get word: ' + (wordData.message || 'Unknown error'));
-            }
-        })
-        .catch(error => {
-            console.error('[DRAWER] Word fetch error:', error);
-            alert('Error getting word: ' + error.message);
+            // 🔥 Guard: only update if still same round
+            if (activeRoundId !== (data.roundId || (data.roundNumber + ":" + data.drawerId))) return;
+
+            wordText.textContent = wordData.word;
+            wordDisplay.classList.remove('hidden');
         });
+
     } else {
-        console.log('[GUESSER] Disabling canvas');
         if (canvasContainer) canvasContainer.classList.add('disabled');
         if (drawingTools) drawingTools.style.display = 'none';
+
         wordDisplay.classList.add('hidden');
+
+        // 🔥 No fallback mask — must come from backend
+        if (!data.maskedWord) {
+            console.warn("Masked word missing from ROUND_START payload");
+            return;
+        }
+
+        activeMaskedWord = data.maskedWord.split('');
+        maskedWordDiv.classList.remove('hidden');
+        maskedWordDiv.textContent = data.maskedWord;
+
+        startHintReveal(data.roundId || (data.roundNumber + ":" + data.drawerId));
     }
 
-    startTimer(data.roundDuration);
+    startTimer(data.endTime);
     fetchSessionInfo();
 }
 
+
+
 /* ==================== TIMER ==================== */
-function startTimer(duration) {
-    var remaining = duration;
-    timeRemaining.textContent = remaining;
+function startTimer(endTime) {
+    if (timerInterval) clearInterval(timerInterval);
 
-    if (timerInterval) {
-        clearInterval(timerInterval);
-    }
-
-    timerInterval = setInterval(function() {
-        remaining--;
+    function tick() {
+        var remaining = Math.max(0, Math.floor((new Date(endTime) - Date.now()) / 1000));
         timeRemaining.textContent = remaining;
 
         if (remaining <= 0) {
             clearInterval(timerInterval);
+            timerInterval = null;
         }
-    }, 1000);
+    }
+
+    tick(); // run immediately
+    timerInterval = setInterval(tick, 1000);
 }
+
+
+function startHintReveal(roundKey) {
+    if (hintInterval) clearInterval(hintInterval);
+
+    hintInterval = setInterval(function () {
+        if (activeRoundId !== roundKey) {
+            clearInterval(hintInterval);
+            return;
+        }
+
+        revealNextLetter(); // purely UI update based on WebSocket events
+    }, 25000);
+}
+
+
 
 /* ==================== ROUND END ==================== */
 //function endRound() {
@@ -486,20 +518,32 @@ function startTimer(duration) {
 //        alert('Error ending round: ' + error.message);
 //    });
 //}
-var autoNextRoundTimer = null; // put this near your globals (top of main.js)
 
 function showRoundEnd(data) {
     console.log('[ROUND_END] Showing round end screen');
-    console.log('[ROUND_END] Data:', data);
+
+    // 🔥 Kill timers
+    if (hintInterval) clearInterval(hintInterval);
+    if (timerInterval) clearInterval(timerInterval);
+    if (autoNextRoundTimer) clearInterval(autoNextRoundTimer);
+
+    hintInterval = null;
+    timerInterval = null;
+    autoNextRoundTimer = null;
+
+    activeRoundId = null;
+    activeMaskedWord = null;
+    revealedIndexes.clear();
 
     chatPage.classList.add('hidden');
     roundEndPage.classList.remove('hidden');
 
     revealedWord.textContent = data.correctWord || 'Word not available';
+    document.getElementById("roundEndSound").play();
+
 
     roundEndLeaderboard.innerHTML = '';
-
-    if (data.leaderboard && data.leaderboard.length > 0) {
+    if (data.leaderboard) {
         data.leaderboard.forEach(function(player, index) {
             var li = document.createElement('li');
             li.innerHTML =
@@ -507,53 +551,45 @@ function showRoundEnd(data) {
                 '<span>' + player.totalScore + ' pts</span>';
             roundEndLeaderboard.appendChild(li);
         });
-    } else {
-        var li = document.createElement('li');
-        li.textContent = 'No scores yet';
-        roundEndLeaderboard.appendChild(li);
     }
 
-    // Clear any previous timer (safety)
-    if (autoNextRoundTimer) {
-        clearInterval(autoNextRoundTimer);
-        autoNextRoundTimer = null;
-    }
+    var maskedWordDiv = document.getElementById("maskedWord");
+    maskedWordDiv.textContent = '';
+    maskedWordDiv.classList.add('hidden');
 
     if (data.isGameComplete) {
-        console.log('[ROUND_END] Game complete');
         nextRoundInfo.classList.add('hidden');
         nextRoundBtn.classList.add('hidden');
-        waitingNextRound.textContent = 'Game Over! Thanks for playing.';
+        waitingNextRound.textContent = 'Game Over!';
         waitingNextRound.classList.remove('hidden');
-    } else {
-        console.log('[ROUND_END] Next drawer:', data.nextDrawerUsername);
-        nextDrawer.textContent = data.nextDrawerUsername || 'Unknown';
-        nextRoundInfo.classList.remove('hidden');
+        roundEndPage.classList.add('hidden');
+        document.getElementById("winnerScreen").classList.remove("hidden");
 
-        // Hide manual button for everyone during auto-start
+        var winner = data.leaderboard[0];
+        document.getElementById("winnerName").textContent =
+        winner.username + " - " + winner.totalScore + " pts";
+    } else {
+        nextDrawer.textContent = data.nextDrawerUsername || 'Unknown';
         nextRoundBtn.classList.add('hidden');
 
-        // Start 5-second countdown
-        var secondsLeft = 5;
+        let secondsLeft = 5;
         waitingNextRound.textContent = 'Next round starting in ' + secondsLeft + '...';
         waitingNextRound.classList.remove('hidden');
 
-        autoNextRoundTimer = setInterval(function () {
+        autoNextRoundTimer = setInterval(() => {
             secondsLeft--;
             if (secondsLeft > 0) {
                 waitingNextRound.textContent = 'Next round starting in ' + secondsLeft + '...';
             } else {
                 clearInterval(autoNextRoundTimer);
-                autoNextRoundTimer = null;
-
-                    waitingNextRound.textContent = 'Starting...';
-
+                waitingNextRound.textContent = 'Starting...';
             }
         }, 1000);
     }
 
     fetchSessionInfo();
 }
+
 
 //function startNextRound() {
 //    console.log('[ROUND] Starting next round');
@@ -613,8 +649,13 @@ function onMessageReceived(payload) {
 
         case 'EVENT':
             addEventMessage(message.content);
+
+            if (message.content.includes("correct")) {
+                document.getElementById("correctSound").play();
+            }
             fetchSessionInfo();
             break;
+
 
         case 'DRAW':
             try {
@@ -626,18 +667,16 @@ function onMessageReceived(payload) {
             break;
 
         case 'ROUND_START':
-            if (message.playerId !== playerId) {
-                console.log('[WS] Processing ROUND_START from another player');
-                try {
-                    var roundData = JSON.parse(message.content);
-                    setTimeout(function() {
-                        startRound(roundData);
-                    }, 200);
-                } catch(e) {
-                    console.error('[ROUND_START] Parse error:', e);
-                }
+            var roundData = JSON.parse(message.content);
+
+            if (roundData.roundId === activeRoundId) {
+                console.warn("Duplicate ROUND_START ignored");
+                return;
             }
+
+            setTimeout(() => startRound(roundData), 50);
             break;
+
 
         case 'ROUND_END':
             console.log('[WS] Processing ROUND_END');
@@ -653,6 +692,23 @@ function onMessageReceived(payload) {
         case 'CHAT':
             addChatMessage(message);
             break;
+
+        case 'HINT_UPDATE':
+            var hintData = JSON.parse(message.content);
+            var maskedWordDiv = document.getElementById("maskedWord");
+
+            if (!gameState.isDrawer) {
+                maskedWordDiv.textContent = hintData.maskedWord;
+                maskedWordDiv.classList.remove("hidden");
+
+                maskedWordDiv.classList.remove("reveal");
+                void maskedWordDiv.offsetWidth; // reflow trick
+                maskedWordDiv.classList.add("reveal");
+            }
+            break;
+
+;
+
     }
 }
 

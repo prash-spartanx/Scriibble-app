@@ -54,17 +54,23 @@
             <h2>Drawing Game - Round <span id="currentRound">0</span>/<span id="maxRounds">0</span></h2>
             <button id="leaveGameBtn" class="leave-btn">Leave Game</button>
         </div>
+
         <div class="game-info">
             <div class="drawer-info">
                 <strong>Drawer:</strong> <span id="currentDrawer">-</span>
             </div>
+
             <div class="word-display hidden" id="wordDisplay">
                 <strong>Your word:</strong> <span id="wordText"></span>
             </div>
+
+            <div id="maskedWord" class="masked-word hidden">------</div>
+
             <div class="timer-display">
                 <strong>Time:</strong> <span id="timeRemaining">60</span>s
             </div>
         </div>
+
         <div class="canvas-container" id="canvasContainer">
             <canvas id="drawingCanvas" width="800" height="600"></canvas>
             <div class="drawing-tools" id="drawingTools">
@@ -96,6 +102,9 @@
         <h1>Round Complete!</h1>
         <div class="word-reveal">
             <p>The Word was: <strong id="revealedWord"></strong></p>
+            <audio id="correctSound" src="/sounds/correct.mp3"></audio>
+            <audio id="roundEndSound" src="/sounds/round-end.mp3"></audio>
+
         </div>
         <div class="leaderboard-section">
             <h3>Leaderboard</h3>
@@ -108,6 +117,13 @@
         <p class="waiting-message hidden" id="waitingNextRound">Waiting for next Round...</p>
     </div>
 </div>
+
+<div id="winnerScreen" class="hidden">
+    <h1>🏆 Winner</h1>
+    <h2 id="winnerName"></h2>
+    <button onclick="location.reload()">Play Again</button>
+</div>
+
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>

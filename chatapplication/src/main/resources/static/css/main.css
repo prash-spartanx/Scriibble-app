@@ -441,3 +441,25 @@ body {
         pointer-events: none;
     }
 
+    .masked-word {
+        background: #e3f2fd;
+        color: #1565c0;
+        padding: 10px 20px;
+        border-radius: 5px;
+        font-size: 20px;
+        font-weight: bold;
+        letter-spacing: 8px;
+        font-family: 'Courier New', Courier, monospace;
+        text-align: center;
+    }
+
+    .reveal {
+      animation: pop 0.3s ease;
+    }
+
+    @keyframes pop {
+      0% { transform: scale(1.2); color: green; }
+      100% { transform: scale(1); color: black; }
+    }
+
+

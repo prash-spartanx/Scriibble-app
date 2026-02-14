@@ -9,5 +9,7 @@ public enum MessageType {
     ROUND_START,
     ROUND_END,
     GAME_END,
-    DRAW
+    DRAW,
+    HINT_UPDATE
+
 }

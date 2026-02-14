@@ -6,6 +6,7 @@ import com.example.game_service.model.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -16,9 +17,9 @@ import java.util.stream.Collectors;
 public class GameService {
     @Autowired
     private ChatServiceClient chatServiceClient;
-
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    private final Map<String, ScheduledFuture<?>> roundTimers = new ConcurrentHashMap<>();
+    private final Map<String, ScheduledFuture<?>> hintTimers = new ConcurrentHashMap<>();
     private final Map<String , GameSession> sessionsById = new ConcurrentHashMap<>();
     private final Map<String , String> roomCodeToSessionId = new ConcurrentHashMap<>();
 
@@ -84,27 +85,34 @@ public class GameService {
         );
     }
 
-    public synchronized StartRoundResponse startRound(StartRoundRequest request){
+    public synchronized StartRoundResponse startRound(StartRoundRequest request) {
+
         GameSession session = sessionsById.get(request.getSessionId());
-        if(session == null) {
+        if (session == null) {
             throw new RuntimeException("Session not found.");
         }
-        if(!session.getAdminPlayerId().equals(request.getRequesterId())){
+
+        if (!session.getAdminPlayerId().equals(request.getRequesterId())) {
             throw new RuntimeException("Only admin can start the round.");
         }
-        if(session.isGameComplete()){
+
+        if (session.isGameComplete()) {
             throw new RuntimeException("Game is already complete.");
         }
+
         List<Player> activePlayers = session.getActivePlayers();
-        if(activePlayers.size() <2) {
+        if (activePlayers.size() < 2) {
             throw new RuntimeException("Not enough players to start the round.");
         }
+
         Round currentRound = session.getCurrentRound();
-        if(currentRound != null && currentRound.getStatus() == RoundStatus.ACTIVE){
+        if (currentRound != null && currentRound.getStatus() == RoundStatus.ACTIVE) {
             currentRound.setStatus(RoundStatus.COMPLETED);
         }
+
         Player drawer = session.getCurrentDrawer();
         String wordToDraw = WORD_BANK.get(new Random().nextInt(WORD_BANK.size()));
+
         Round newRound = new Round(
                 session.getCurrentRoundNumber(),
                 wordToDraw,
@@ -112,14 +120,65 @@ public class GameService {
                 drawer.getUsername(),
                 session.getRoundDuration()
         );
+
         session.getRounds().add(newRound);
         session.setStatus(GameStatus.IN_PROGRESS);
         session.updateAllDrawerStatus(drawer.getPlayerId());
 
-        scheduler.schedule(() -> safeEndRound(session.getSessionId()),
+        String sessionId = session.getSessionId();
+
+        // 🔥 CANCEL OLD ROUND TIMER
+        ScheduledFuture<?> oldRoundTimer = roundTimers.get(sessionId);
+        if (oldRoundTimer != null && !oldRoundTimer.isDone()) {
+            oldRoundTimer.cancel(true);
+        }
+
+        // 🔥 CANCEL OLD HINT TIMER
+        ScheduledFuture<?> oldHintTimer = hintTimers.get(sessionId);
+        if (oldHintTimer != null && !oldHintTimer.isDone()) {
+            oldHintTimer.cancel(true);
+        }
+
+        // ⏱️ SCHEDULE ROUND END (ONLY ONE)
+        ScheduledFuture<?> roundFuture = scheduler.schedule(() -> safeEndRound(sessionId),
                 session.getRoundDuration(), TimeUnit.SECONDS);
 
-         StartRoundResponse response = new  StartRoundResponse(
+        roundTimers.put(sessionId, roundFuture);
+
+        // 💡 SCHEDULE HINT REVEAL (EVERY 25 SECONDS)
+        ScheduledFuture<?> hintFuture = scheduler.scheduleAtFixedRate(() -> {
+            try {
+                GameSession s = sessionsById.get(sessionId);
+                if (s == null) return;
+
+                Round r = s.getCurrentRound();
+                if (r == null || r.getStatus() != RoundStatus.ACTIVE) return;
+
+                String word = r.getWord();
+
+                List<Integer> unrevealed = new ArrayList<>();
+                for (int i = 0; i < word.length(); i++) {
+                    if (!r.getRevealedIndexes().contains(i)) {
+                        unrevealed.add(i);
+                    }
+                }
+
+                if (unrevealed.isEmpty()) return;
+
+                int randomIndex = unrevealed.get(new Random().nextInt(unrevealed.size()));
+                r.getRevealedIndexes().add(randomIndex);
+
+                HintUpdateResponse hint = new HintUpdateResponse(r.getMaskedWord());
+                chatServiceClient.broadcastHintUpdate(sessionId, hint);
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }, 25, 25, TimeUnit.SECONDS);
+
+        hintTimers.put(sessionId, hintFuture);
+
+        StartRoundResponse response = new StartRoundResponse(
                 newRound.getRoundId(),
                 newRound.getRoundNumber(),
                 newRound.getDrawerId(),
@@ -128,18 +187,25 @@ public class GameService {
                 "Turn " + newRound.getRoundNumber() + " started. " + drawer.getUsername() + " is drawing.",
                 newRound.getEndTime()
         );
-        chatServiceClient.broadcastRoundStart(request.getSessionId(), response);
-        return response;
 
+        chatServiceClient.broadcastRoundStart(sessionId, response);
+        return response;
     }
 
     private synchronized void safeEndRound(String sessionId) {
         GameSession session = sessionsById.get(sessionId);
         if (session == null) return;
+
         Round currentRound = session.getCurrentRound();
-        if (currentRound == null || currentRound.getStatus() != RoundStatus.ACTIVE) return;
+        if (currentRound == null) return;
+
+        if (currentRound.getStatus() != RoundStatus.ACTIVE) {
+            return; // prevent double-end
+        }
+
         endRound(sessionId);
     }
+
 
     public synchronized EndRoundResponse endRound(String sessionId) {
         GameSession session = sessionsById.get(sessionId);

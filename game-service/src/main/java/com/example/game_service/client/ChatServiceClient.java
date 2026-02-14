@@ -1,6 +1,7 @@
 package com.example.game_service.client;
 
 import com.example.game_service.dto.EndRoundResponse;
+import com.example.game_service.dto.HintUpdateResponse;
 import com.example.game_service.dto.StartRoundResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -28,6 +29,15 @@ public class ChatServiceClient {
                 Void.class
         );
     }
+
+    public void broadcastHintUpdate(String sessionId, HintUpdateResponse response) {
+        restTemplate.postForObject(
+                chatServiceUrl + "/internal/broadcast/hint",
+                Map.of("sessionId", sessionId, "data", response),
+                Void.class
+        );
+    }
+
 
     public void broadcastRoundEnd(String sessionId, EndRoundResponse response) {
         Map<String, Object> payload = Map.of(

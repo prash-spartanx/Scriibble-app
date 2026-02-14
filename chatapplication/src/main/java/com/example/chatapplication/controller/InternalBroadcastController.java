@@ -38,6 +38,20 @@ public class InternalBroadcastController {
         messagingTemplate.convertAndSend("/topic/public", msg);
     }
 
+    @PostMapping("/internal/broadcast/hint")
+    public void broadcastHint(@RequestBody Map<String, Object> payload) throws Exception {
+        Object data = payload.get("data");
+        String json = objectMapper.writeValueAsString(data);
+
+        ChatMessage msg = new ChatMessage();
+        msg.setType(MessageType.HINT_UPDATE);
+        msg.setContent(json);
+        msg.setSender("SYSTEM");
+
+        messagingTemplate.convertAndSend("/topic/public", msg);
+    }
+
+
     @PostMapping("/internal/broadcast/round-start")
     public void broadcastRoundStart(@RequestBody Map<String, Object> payload) throws Exception {
         Object data = payload.get("data");
